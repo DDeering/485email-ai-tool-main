@@ -1,33 +1,80 @@
 <script lang="ts">
-	import type { CreateCompletionResponse } from 'openai'
-	import { SSE } from 'sse.js'
-	import Login from './login.svelte'; // Ensure the correct path
-	import History from './history.svelte';
-	import ContentView from './contentView.svelte';
+    import type { CreateCompletionResponse } from 'openai';
+    import { SSE } from 'sse.js';
+    import FieldWrapper from "../../components/field-wrapper.svelte";
+    import Login from './login.svelte'; // Ensure the correct path
+    import History from './history.svelte';
+    import { initializeApp } from 'firebase/app';
+    import { getFirestore, setDoc, getDocs, collection, Firestore } from 'firebase/firestore';
+    import { docStore } from "sveltefire";
+    import { getAnalytics } from "firebase/analytics";
+    import { onMount } from 'svelte';
+    import ContentView from './contentView.svelte';
 
-	let context = ''
-	let requirement = ''
-	let writingExample = ''
+    const firebaseConfig = {
+  apiKey: "AIzaSyAFxmdgTabKYliNNrZVj0s2XCFZPfwTyps",
+  authDomain: "touchpoint-capstone-database.firebaseapp.com",
+  projectId: "touchpoint-capstone-database",
+  storageBucket: "touchpoint-capstone-database.appspot.com",
+  messagingSenderId: "1032080279652",
+  appId: "1:1032080279652:web:9a53f2acb5069e91513771",
+  measurementId: "G-HH2QG68FLN"
+};
 
-	let loading = false
-	let error = false
-	let answer = ''
-	let copyDisabled = true;
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore();
+   // const analytics = getAnalytics(app);
 
-	// let selectedContent = null;
-    	let showLogin = false; // Add this to track if the login modal should be shown
-	let showHistory = false;
+async function getPersonas(db: Firestore) {
+  const writingStylesCollection  = collection(db, 'writingStyles');
+  const querySnapshot  = await getDocs(writingStylesCollection);
+  const writingStylesData  = querySnapshot .docs.map(doc => doc.data());
+  return writingStylesData ;
+}
 
-	const handleSubmit = async () => {
+
+let writingStyles: any[] = [];
+
+onMount(async () => {
+        writingStyles = await getPersonas(db);
+    });
+
+    let context = '';
+    let requirement = '';
+    let writingExample = '';
+
+
+    //new code
+    let targetAudience = '';
+    let keywords = '';
+    let tone = '';
+    let targetwordCount = '';
+    let yourName = '';
+
+    let context2 = '';
+    let loading2 = false;
+    let error2 = false;
+    let answer2 = '';
+    let copyDisabled2 = true;
+    
+    let loading = false;
+    let error = false;
+    let answer = '';
+    let copyDisabled = true;
+
+    // let selectedContent = null;
+    let showLogin = false; // Add this to track if the login modal should be shown
+    let showHistory = false;
+
+    const handleSubmit = async () => {
 		loading = true
 		error = false
 		answer = ''
 		context = ''
-		context = "Write longest anticle about: " + requirement + 
-		"Write it in my writing style and tone but do not reiterate words from the text below because it is completely unrelated, only use it as a reference: "  
-		+ writingExample + "requirement of length of this article: longer the better";
+		context = "Create an outline for a comprehensive 3000-4000 word article about " + requirement + 
+		", give speculated word counts for each section. Write it in this writing style and tone: " + tone;
 
-		const eventSource = new SSE('/api/explain', {
+		const eventSource = new SSE('/api/explain2', {
 			headers: {
 				'Content-Type': 'application/json'
 			},
@@ -66,6 +113,55 @@
 
 		eventSource.stream()
 	}
+
+    const handleSubmitArt = async () => {
+		loading2 = true
+		error2 = false
+		//answer = ''
+		context2 = ''
+		context2 = "Create an article based on this outline: " + answer + 
+		", Write it in this writing style and tone: " + tone;
+
+		const eventSource = new SSE('/api/explain2', {
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			payload: JSON.stringify({ context })
+		})
+
+		context = ''
+
+		eventSource.addEventListener('error', (e) => {
+			error2 = true
+			loading2 = false
+			alert('Something went wrong!')
+		})
+
+		eventSource.addEventListener('message', (e) => {
+			try {
+				loading2 = false
+
+				if (e.data === '[DONE]') {
+					copyDisabled = false;
+					return
+				}
+
+				const completionResponse: CreateCompletionResponse = JSON.parse(e.data)
+
+				const [{ text }] = completionResponse.choices
+
+				answer2 = (answer2 ?? '') + text
+			} catch (err) {
+				error2 = true
+				loading2 = false
+				console.error(err)
+				alert('Something went wrong!')
+			}
+		})
+
+		eventSource.stream()
+	}
+
 	const copyToClipboard = () => {
 		const elem = document.createElement('textarea')
 		elem.value = answer
@@ -77,79 +173,92 @@
  	}
 </script>
 
-<style>
-    /* Add this style to your component */
-    header h1 {
-        background: linear-gradient(to right, blue, purple);
-        -webkit-background-clip: text;
-        color: transparent;
-    }
-    header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        background-color: white; /* To ensure text/content beneath doesn't show through */
-        z-index: 10; /* Keep the header above all other content */
-    }
-    nav {
-        display: flex;
-        align-items: center; 
-        justify-content: space-between;
-    }
-    button + button {
-	margin-left: 10px;
-    }
-    .main-content {
-        margin-top: 60px; /* Adjust as per your header's height */
-    }
-</style>
-
 <header>
-	<a href="https://touchpointdigitalmarketing.com/web-design/">
-        	<span class = "title">touch point</span>
-		<span class="subtitle">Digital Marketing Agency</span>
-    	</a>
-	<nav>
-		<button on:click={() => showLogin = !showLogin}>Login</button>
-		{#if showLogin}
-		    <Login />
-		{/if}
+    <nav>
+        <button on:click={() => showLogin = !showLogin}>Login</button>
+        {#if showLogin}
+            <Login />
+        {/if}
 
-	        <button on:click={() => showHistory = true}>History</button>
-	        {#if showHistory}
-	            <History visible={showHistory} onClose={() => showHistory = false} />
-	        {/if}
-	</nav>
+        <button on:click={() => showHistory = true}>History</button>
+        {#if showHistory}
+            <History visible={showHistory} onClose={() => showHistory = false} />
+        {/if}
+    </nav>
 </header>
 
-<div class="main-content">
-	<h1>Welcome to Touch Point Digital Marketing Agency</h1>
-	<h2>Unlocking Your Business' Potential by Maximizing the Power of the Internet.</h2>
-	<form on:submit|preventDefault={() => handleSubmit()}>
-		<label for="requirement">What is the article about?</label>
-		<textarea name="requirement" rows="2" bind:value={requirement}></textarea>
-	
-		<label for="writingExample">Provide sample articles below so your writing style and tone can be replicated.</label>
-		<textarea id="email-textarea" name="writingExample" rows="5" bind:value={writingExample}></textarea>
-		<button>Write Article</button>
-	</form>
+<div class="max-w-md w-full m-auto flex flex-col items-center p-12">
+    <h1 class="text-3xl font-semibold">Write Me an Article</h1>
+    <h2 class="text-sm text-dull my-6">Please fill out the details</h2>
+    <form on:submit|preventDefault={handleSubmit} class="w-full p-4">
+        <FieldWrapper 
+        label="Tone & Style"
+        >
+        <div class="relative">
+            <select placeholder="Select" class="form-field w-full" bind:value={yourName}>
+                <option value="">Custom Tone</option>
+                {#each writingStyles as style}
+                <option value={style.personaName}>{style.personaName}</option>
+                {/each}
+            </select>
+            <span class="absolute right-4 top-5 arrow"/>
+        </div>
 
-	<div class="pt-4">
-		<h2>Generated Article:</h2>
-		{#if answer}
-		<div>{@html answer}</div>
-		{/if}
-		{#if answer}
-		  <button on:click|preventDefault={() => copyToClipboard()} disabled={copyDisabled}>Copy</button>
-		{/if}
-	</div>
-<!-- 
-	{#if selectedContent}
-	    <ContentView content={selectedContent} on:closecontent={() => { selectedContent = null; showHistory = true; }} />
-	{/if} -->
+        <input type="text" class="form-field w-full" placeholder="Ex: conversational, informative, energetic..." bind:value={tone}>
+        </FieldWrapper>
+
+        <FieldWrapper label="Target Audience">
+            <textarea class="form-field w-full h-10" name="target audience" bind:value={targetAudience} placeholder="Ex: Small businesses, Mothers, Students..."></textarea>
+        </FieldWrapper>
+
+        <FieldWrapper label="Keywords">
+            <textarea class="form-field w-full h-10" name="keywords" bind:value={keywords} placeholder="Ex: Innovation, Subscription, Pre-order..."></textarea>
+        </FieldWrapper>
+
+        <FieldWrapper label="What is the article about?">
+            <textarea class="form-field w-full h-20" name="requirement" bind:value={requirement} placeholder="Describe the article topic here"></textarea>
+        </FieldWrapper>
+        
+        <button class="bg-secondary w-full p-4 rounded-md my-2">Write Outline for Article</button>
+        {#if answer}
+        <FieldWrapper 
+            label="Generated Outline"
+        >
+            <textarea 
+                class="form-field" 
+                rows="20" 
+                bind:value={answer} 
+                style="color: white;"
+            />
+        </FieldWrapper>
+        <button on:click|preventDefault={copyToClipboard} class="bg-secondary w-full p-4 rounded-md my-2" disabled={copyDisabled}>Copy</button>
+    {/if}
+    </form>
+
+    <button on:click|preventDefault={handleSubmitArt} class="bg-secondary w-full p-4 rounded-md my-2" >Generate Article</button>
+    <FieldWrapper 
+    label="Generated Article"
+>
+    <textarea 
+        id = "Custom Article"
+        class="form-field" 
+        rows="20" 
+        bind:value={answer2} 
+        style="color: white;"
+    />
+</FieldWrapper>
+
+    <!-- {#if answer}
+        <div class="my-8 border-[0] border-b border-line"></div>
+        <FieldWrapper label="Generated Article:">
+            <div class="form-field" innerHTML={answer}></div>
+        </FieldWrapper>
+        <button on:click|preventDefault={copyToClipboard} class="bg-secondary w-full p-4 rounded-md my-2" disabled={copyDisabled}>Copy</button>
+    {/if} -->
+        
+   
 </div>
 
 <footer>
-	<!-- You can add footer content here -->
+    <!-- Footer content remains unchanged -->
 </footer>
